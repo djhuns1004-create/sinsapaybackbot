@@ -16,6 +16,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ⚠️ 지급조건
 
 ✅️ 소통방 주간 누적 채팅 500개 이상
+✅️ 신사 소통방 코드만 참여가능 
 ✅️ 소통방 채널 입장(미입장시 지급불가)
 ✅️ 최소 누적 손실 30만원 이상부터 신청가능
 
@@ -36,7 +37,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     user_data[user_id] = {"step": "waiting_photo"}
 
-    await query.message.reply_text("충전내역을 첨부해주세요.")
+    await query.message.reply_text("📑 제휴사 충전내역을 첨부해주세요.")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
