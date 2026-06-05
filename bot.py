@@ -16,7 +16,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ⚠️ 지급조건
 
 ✅️ 소통방 주간 누적 채팅 500개 이상
-✅️ 신사 소통방 코드만 참여가능 
+✅️ 신사 소통방 코드만 참여가능(그외 지급불가) 
 ✅️ 소통방 채널 입장(미입장시 지급불가)
 ✅️ 최소 누적 손실 30만원 이상부터 신청가능
 
