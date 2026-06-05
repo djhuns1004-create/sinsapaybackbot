@@ -9,22 +9,23 @@ user_data = {}
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("신사 페이백 신청", callback_data="payback")]]
     await update.message.reply_text(
-    """⚠️ 신사 페이백 신청
+    """♻️ 신사 주간 페이백 신청 ♻️
 
-매주 월요일 ~ 일요일 주간 페이백
+매주 월요일 ~ 일요일 손실 페이백
 
-📌 지급조건
+⚠️ 지급조건
 
-✅ 소통방 주간 누적 채팅 500개 이상
-✅ 신사 소통방 채널 입장
+✅️ 소통방 주간 누적 채팅 500개 이상
+✅️ 소통방 채널 입장(미입장시 지급불가)
+✅️ 최소 누적 손실 30만원 이상부터 신청가능
 
 📌 신청방법
 
-1️⃣ 아래 신청 버튼 클릭
-2️⃣ 충전내역 첨부
-3️⃣ 성명 / 계좌 작성
+✅️ 아래 페이백 신청 버튼 클릭
+✅️ 충전내역 첨부하기
+✅️ 지급받을 성명/계좌 작성
 
-관리자 확인 후 순차적으로 지급됩니다.""",
+확인후 순차적으로 지급됩니다""",
     reply_markup=InlineKeyboardMarkup(keyboard)
 )
 
