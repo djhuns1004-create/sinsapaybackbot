@@ -7,7 +7,7 @@ OWNER_ID = 122190868
 user_data = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("신사 페이백 신청", callback_data="payback")]]
+    keyboard = [[InlineKeyboardButton("🏛 신사 페이백 신청 🏛", callback_data="payback")]]
     await update.message.reply_text(
     """♻️ 신사 주간 페이백 신청 ♻️
 
@@ -25,7 +25,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅️ 충전내역 첨부하기
 ✅️ 지급받을 성명/계좌 작성
 
-확인후 순차적으로 지급됩니다""",
+👀 관리자 확인후 지급됩니다""",
     reply_markup=InlineKeyboardMarkup(keyboard)
 )
 
@@ -49,8 +49,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data[user_id]["step"] = "waiting_account"
 
     await update.message.reply_text(
-        "페이백 받을 성명/계좌를 작성해주세요.\n\n"
-        "예시: 홍길동 / 카카오뱅크 3333-00-0000000"
+        "✍🏻 페이백 받을 성명/계좌를 작성해주세요.\n\n"
+        "✍🏻 예시: 홍길동 / 카카오뱅크 3333-00-0000000"
     )
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -67,7 +67,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_file_id = user_data[user_id]["photo"]
     username = f"@{user.username}" if user.username else "없음"
 
-    await update.message.reply_text("담당자 확인후 페이백 지급.")
+    await update.message.reply_text("👀 담당자 확인후 매주 월요일 페이백 지급.")
 
     owner_text = f"""
 📩 신사 페이백 신청 도착
