@@ -97,4 +97,4 @@ app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
 print("봇 실행 중...")
-app.run_polling()
+app.run_polling(drop_pending_updates=True)
