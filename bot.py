@@ -8,6 +8,7 @@ from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    MessageEntity,
 )
 from telegram.ext import (
     Application,
@@ -61,6 +62,7 @@ RICH_KEYS = {
     "period",
     "conditions",
     "method",
+    "button_text",
     "photo_prompt",
     "account_prompt",
     "complete_text",
@@ -146,12 +148,21 @@ def utf16_to_python_index(text: str, offset: int) -> int:
     return len(text)
 
 
+def is_custom_emoji_entity(entity) -> bool:
+    entity_type = getattr(entity.type, "value", entity.type)
+    return (
+        entity_type == MessageEntity.CUSTOM_EMOJI
+        or entity_type == "custom_emoji"
+        or str(entity.type).lower().endswith("custom_emoji")
+    )
+
+
 def message_to_html(message) -> str:
     text = message.text or ""
     entities = [
         entity
         for entity in (message.entities or [])
-        if str(entity.type) == "custom_emoji"
+        if is_custom_emoji_entity(entity)
         and entity.custom_emoji_id
     ]
 
@@ -297,8 +308,11 @@ async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
+    guide = build_guide_html()
+    button_rich = rich_setting("button_text")
+
     await update.message.reply_text(
-        build_guide_html(),
+        f"{guide}\n\n{button_rich}",
         reply_markup=user_start_keyboard(),
         parse_mode="HTML",
     )
@@ -469,7 +483,7 @@ async def admin_callback(
 
     if query.data == "admin:preview":
         await query.message.reply_text(
-            build_guide_html(),
+            f"{build_guide_html()}\n\n{rich_setting('button_text')}",
             reply_markup=user_start_keyboard(),
             parse_mode="HTML",
         )
@@ -492,10 +506,12 @@ async def admin_callback(
 
         premium_notice = (
             "\n\n프리미엄 이모지를 문구에 함께 보내면 "
-            "안내문에 그대로 표시됩니다."
-            if key in RICH_KEYS
-            else "\n\n버튼 글자는 텔레그램 제한으로 "
-                 "프리미엄 이모지 엔티티를 지원하지 않습니다."
+            "안내문에 그대로 표시됩니다.\n"
+            "신청버튼 문구는 버튼 바로 위 안내줄에는 프리미엄으로 표시되고, "
+            "실제 버튼 안에서는 텔레그램 제한으로 일반 이모지 형태로 표시됩니다."
+            if key == "button_text"
+            else "\n\n프리미엄 이모지를 문구에 함께 보내면 "
+                 "안내문에 그대로 표시됩니다."
         )
 
         await query.message.reply_text(
@@ -559,6 +575,32 @@ async def application_callback(
         await query.message.edit_reply_markup(reply_markup=None)
 
 
+async def debug_emoji(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    if update.effective_user.id != OWNER_ID:
+        return
+
+    entities = update.message.entities or []
+    custom_ids = [
+        entity.custom_emoji_id
+        for entity in entities
+        if is_custom_emoji_entity(entity)
+        and entity.custom_emoji_id
+    ]
+
+    await update.message.reply_text(
+        "✨ 프리미엄 이모지 진단\n\n"
+        f"감지된 custom emoji: {len(custom_ids)}개\n"
+        + (
+            "\n".join(custom_ids)
+            if custom_ids
+            else "감지되지 않았습니다. 프리미엄 이모지를 명령어 뒤에 함께 보내주세요."
+        )
+    )
+
+
 async def error_handler(
     update: object,
     context: ContextTypes.DEFAULT_TYPE,
@@ -580,6 +622,7 @@ def main() -> None:
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin", admin))
+    application.add_handler(CommandHandler("debugemoji", debug_emoji))
 
     application.add_handler(
         CallbackQueryHandler(
