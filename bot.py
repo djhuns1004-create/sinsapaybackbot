@@ -34,34 +34,41 @@ if not TOKEN:
 
 Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
 
+DEFAULT_GUIDE = (
+    "♻️ 신사 주간 페이백 신청 ♻️\n\n"
+    "매주 월요일 ~ 일요일 손실 페이백\n\n"
+    "⚠️ 지급조건\n\n"
+    "✅️ 소통방 주간 누적 채팅 500개 이상\n"
+    "✅️ 신사 소통방 코드만 참여가능(그외 지급불가)\n"
+    "✅️ 소통방 채널 입장(미입장시 지급불가)\n"
+    "✅️ 최소 누적 손실 30만원 이상부터 신청가능\n\n"
+    "📌 신청방법\n\n"
+    "✅️ 아래 페이백 신청 버튼 클릭\n"
+    "✅️ 충전내역 첨부하기\n"
+    "✅️ 지급받을 성명/계좌 작성\n\n"
+    "👀 관리자 확인후 지급됩니다"
+)
+
 DEFAULT_SETTINGS = {
-    "title": "♻️ 신사 주간 페이백 신청 ♻️",
-    "period": "매주 월요일 ~ 일요일 손실 페이백",
-    "conditions": (
-        "✅️ 소통방 주간 누적 채팅 500개 이상\n"
-        "✅️ 신사 소통방 코드만 참여가능(그외 지급불가)\n"
-        "✅️ 소통방 채널 입장(미입장시 지급불가)\n"
-        "✅️ 최소 누적 손실 30만원 이상부터 신청가능"
-    ),
-    "method": (
-        "✅️ 아래 페이백 신청 버튼 클릭\n"
-        "✅️ 충전내역 첨부하기\n"
-        "✅️ 지급받을 성명/계좌 작성"
-    ),
+    "guide_text": DEFAULT_GUIDE,
+    "guide_text__html": "",
+    "guide_backup": "",
+    "guide_backup__html": "",
     "button_text": "🏛 신사 페이백 신청 🏛",
+    "button_text__html": "",
     "photo_prompt": "📑 제휴사 충전내역을 첨부해주세요.",
+    "photo_prompt__html": "",
     "account_prompt": (
         "✍🏻 페이백 받을 성명/계좌를 작성해주세요.\n\n"
         "✍🏻 예시: 홍길동 / 카카오뱅크 3333-00-0000000"
     ),
+    "account_prompt__html": "",
     "complete_text": "👀 담당자 확인후 매주 월요일 페이백 지급.",
+    "complete_text__html": "",
 }
 
 RICH_KEYS = {
-    "title",
-    "period",
-    "conditions",
-    "method",
+    "guide_text",
     "button_text",
     "photo_prompt",
     "account_prompt",
@@ -105,11 +112,36 @@ def init_db() -> None:
                 "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
                 (key, value),
             )
-            if key in RICH_KEYS:
-                conn.execute(
-                    "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
-                    (f"{key}__html", ""),
-                )
+
+        # 기존 분할형 안내문이 있던 DB는 최초 1회 전체 안내문으로 자동 변환
+        guide_row = conn.execute(
+            "SELECT value FROM settings WHERE key = 'guide_text'"
+        ).fetchone()
+        if not guide_row or not guide_row["value"]:
+            def old_value(old_key: str, fallback: str = "") -> str:
+                row = conn.execute(
+                    "SELECT value FROM settings WHERE key = ?",
+                    (old_key,),
+                ).fetchone()
+                return row["value"] if row else fallback
+
+            migrated_guide = (
+                f"{old_value('title', '♻️ 신사 주간 페이백 신청 ♻️')}\n\n"
+                f"{old_value('period', '매주 월요일 ~ 일요일 손실 페이백')}\n\n"
+                "⚠️ 지급조건\n\n"
+                f"{old_value('conditions')}\n\n"
+                "📌 신청방법\n\n"
+                f"{old_value('method')}\n\n"
+                "👀 관리자 확인후 지급됩니다"
+            )
+            conn.execute(
+                """
+                INSERT INTO settings(key, value)
+                VALUES ('guide_text', ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (migrated_guide,),
+            )
 
         conn.commit()
 
@@ -203,15 +235,7 @@ def rich_setting(key: str) -> str:
 
 
 def build_guide_html() -> str:
-    return (
-        f"{rich_setting('title')}\n\n"
-        f"{rich_setting('period')}\n\n"
-        "⚠️ 지급조건\n\n"
-        f"{rich_setting('conditions')}\n\n"
-        "📌 신청방법\n\n"
-        f"{rich_setting('method')}\n\n"
-        "👀 관리자 확인후 지급됩니다"
-    )
+    return rich_setting("guide_text")
 
 
 def user_start_keyboard() -> InlineKeyboardMarkup:
@@ -230,23 +254,9 @@ def admin_keyboard() -> InlineKeyboardMarkup:
         [
             [
                 InlineKeyboardButton(
-                    "📝 제목 수정",
-                    callback_data="admin:edit:title",
-                ),
-                InlineKeyboardButton(
-                    "📅 신청기간 수정",
-                    callback_data="admin:edit:period",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    "⚠️ 지급조건 수정",
-                    callback_data="admin:edit:conditions",
-                ),
-                InlineKeyboardButton(
-                    "📌 신청방법 수정",
-                    callback_data="admin:edit:method",
-                ),
+                    "📝 전체 안내문 수정",
+                    callback_data="admin:edit:guide_text",
+                )
             ],
             [
                 InlineKeyboardButton(
@@ -274,6 +284,39 @@ def admin_keyboard() -> InlineKeyboardMarkup:
                     callback_data="admin:preview",
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    "💾 현재 안내문 백업",
+                    callback_data="admin:backup",
+                ),
+                InlineKeyboardButton(
+                    "♻️ 백업 안내문 복원",
+                    callback_data="admin:restore",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "⚠️ 기본 안내문 초기화",
+                    callback_data="admin:reset_confirm",
+                )
+            ],
+        ]
+    )
+
+
+def reset_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "⚠️ 정말 초기화",
+                    callback_data="admin:reset",
+                ),
+                InlineKeyboardButton(
+                    "❌ 취소",
+                    callback_data="admin:cancel",
+                ),
+            ]
         ]
     )
 
@@ -328,8 +371,8 @@ async def admin(
     context.user_data.pop("admin_edit_key", None)
     await update.message.reply_text(
         "👑 신사 페이백 관리자센터\n\n"
-        "수정할 항목을 선택해주세요.\n"
-        "안내문에는 프리미엄 이모지를 함께 넣을 수 있습니다.",
+        "전체 안내문을 한 번에 수정할 수 있습니다.\n"
+        "줄바꿈과 프리미엄 이모지도 그대로 저장됩니다.",
         reply_markup=admin_keyboard(),
     )
 
@@ -387,8 +430,13 @@ async def handle_text(
 
         if edit_key in RICH_KEYS:
             preview = message_to_html(update.message)
+            label = (
+                "전체 안내문"
+                if edit_key == "guide_text"
+                else "문구"
+            )
             await update.message.reply_text(
-                f"✅ 문구가 저장되었습니다.\n\n"
+                f"✅ {label}이 저장되었습니다.\n\n"
                 f"표시 미리보기:\n{preview}",
                 reply_markup=admin_keyboard(),
                 parse_mode="HTML",
@@ -480,8 +528,9 @@ async def admin_callback(
         return
 
     await query.answer()
+    action = query.data
 
-    if query.data == "admin:preview":
+    if action == "admin:preview":
         await query.message.reply_text(
             f"{build_guide_html()}\n\n{rich_setting('button_text')}",
             reply_markup=user_start_keyboard(),
@@ -489,30 +538,96 @@ async def admin_callback(
         )
         return
 
-    if query.data.startswith("admin:edit:"):
-        key = query.data.split(":", 2)[2]
+    if action == "admin:backup":
+        set_setting("guide_backup", get_setting("guide_text"))
+        set_setting(
+            "guide_backup__html",
+            get_setting("guide_text__html"),
+        )
+        await query.message.reply_text(
+            "💾 현재 전체 안내문을 백업했습니다.",
+            reply_markup=admin_keyboard(),
+        )
+        return
+
+    if action == "admin:restore":
+        backup = get_setting("guide_backup")
+        backup_html = get_setting("guide_backup__html")
+
+        if not backup and not backup_html:
+            await query.message.reply_text(
+                "복원할 백업 안내문이 없습니다.",
+                reply_markup=admin_keyboard(),
+            )
+            return
+
+        set_setting("guide_text", backup)
+        set_setting("guide_text__html", backup_html)
+
+        await query.message.reply_text(
+            "♻️ 백업 안내문을 복원했습니다.",
+            reply_markup=admin_keyboard(),
+        )
+        return
+
+    if action == "admin:reset_confirm":
+        await query.message.reply_text(
+            "⚠️ 전체 안내문을 기본 문구로 초기화합니다.\n"
+            "현재 안내문은 사라지므로 먼저 백업하는 것을 권장합니다.",
+            reply_markup=reset_confirm_keyboard(),
+        )
+        return
+
+    if action == "admin:reset":
+        set_setting("guide_text", DEFAULT_GUIDE)
+        set_setting("guide_text__html", "")
+        context.user_data.pop("admin_edit_key", None)
+
+        await query.message.reply_text(
+            "✅ 전체 안내문을 기본 문구로 초기화했습니다.",
+            reply_markup=admin_keyboard(),
+        )
+        return
+
+    if action == "admin:cancel":
+        await query.message.reply_text(
+            "초기화를 취소했습니다.",
+            reply_markup=admin_keyboard(),
+        )
+        return
+
+    if action.startswith("admin:edit:"):
+        key = action.split(":", 2)[2]
         context.user_data["admin_edit_key"] = key
 
         labels = {
-            "title": "제목",
-            "period": "신청기간",
-            "conditions": "지급조건",
-            "method": "신청방법",
+            "guide_text": "전체 안내문",
             "button_text": "신청버튼 문구",
             "photo_prompt": "사진요청 문구",
             "account_prompt": "계좌요청 문구",
             "complete_text": "신청완료 문구",
         }
 
+        if key == "guide_text":
+            await query.message.reply_text(
+                "📝 전체 안내문 수정\n\n"
+                "새 안내문 전체를 한 번에 보내주세요.\n"
+                "제목, 지급조건, 신청방법, 마지막 안내까지 "
+                "원하는 형태로 모두 작성하면 됩니다.\n\n"
+                "줄바꿈과 프리미엄 이모지도 그대로 저장됩니다.\n\n"
+                f"현재 안내문:\n{get_setting('guide_text')}"
+            )
+            return
+
         premium_notice = (
-            "\n\n프리미엄 이모지를 문구에 함께 보내면 "
-            "안내문에 그대로 표시됩니다.\n"
-            "신청버튼 문구는 버튼 바로 위 안내줄에는 프리미엄으로 표시되고, "
-            "실제 버튼 안에서는 텔레그램 제한으로 일반 이모지 형태로 표시됩니다."
-            if key == "button_text"
-            else "\n\n프리미엄 이모지를 문구에 함께 보내면 "
-                 "안내문에 그대로 표시됩니다."
+            "\n\n프리미엄 이모지를 함께 보내면 "
+            "안내 메시지에 그대로 표시됩니다."
         )
+        if key == "button_text":
+            premium_notice += (
+                "\n실제 버튼 안에서는 텔레그램 제한으로 "
+                "프리미엄 이모지가 일반 이모지 형태로 표시됩니다."
+            )
 
         await query.message.reply_text(
             f"✏️ {labels.get(key, key)} 수정\n\n"
