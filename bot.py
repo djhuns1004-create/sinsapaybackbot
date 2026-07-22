@@ -351,11 +351,8 @@ async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
-    guide = build_guide_html()
-    button_rich = rich_setting("button_text")
-
     await update.message.reply_text(
-        f"{guide}\n\n{button_rich}",
+        build_guide_html(),
         reply_markup=user_start_keyboard(),
         parse_mode="HTML",
     )
@@ -532,7 +529,7 @@ async def admin_callback(
 
     if action == "admin:preview":
         await query.message.reply_text(
-            f"{build_guide_html()}\n\n{rich_setting('button_text')}",
+            build_guide_html(),
             reply_markup=user_start_keyboard(),
             parse_mode="HTML",
         )
