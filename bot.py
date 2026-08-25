@@ -65,6 +65,8 @@ DEFAULT_SETTINGS = {
     "account_prompt__html": "",
     "complete_text": "👀 담당자 확인후 매주 월요일 페이백 지급.",
     "complete_text__html": "",
+    "reject_text": "❌ 페이백 신청이 거절되었습니다.",
+    "reject_text__html": "",
 }
 
 RICH_KEYS = {
@@ -73,6 +75,7 @@ RICH_KEYS = {
     "photo_prompt",
     "account_prompt",
     "complete_text",
+    "reject_text",
 }
 
 
@@ -280,6 +283,12 @@ def admin_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    "❌ 거절문구 수정",
+                    callback_data="admin:edit:reject_text",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     "👀 안내문 미리보기",
                     callback_data="admin:preview",
                 )
@@ -333,7 +342,7 @@ def application_review_keyboard(
                     callback_data=f"application:approve:{application_id}:{user_id}",
                 ),
                 InlineKeyboardButton(
-                    "❌ 반려",
+                    "❌ 거절",
                     callback_data=f"application:reject:{application_id}:{user_id}",
                 ),
             ],
@@ -603,6 +612,7 @@ async def admin_callback(
             "photo_prompt": "사진요청 문구",
             "account_prompt": "계좌요청 문구",
             "complete_text": "신청완료 문구",
+            "reject_text": "거절문구",
         }
 
         if key == "guide_text":
@@ -659,7 +669,7 @@ async def application_callback(
     }
     message_map = {
         "approve": "✅ 페이백 신청이 승인되었습니다.",
-        "reject": "❌ 페이백 신청이 반려되었습니다.",
+        "reject": "❌ 페이백 신청이 거절되었습니다.",
         "paid": "💸 페이백 지급이 완료되었습니다.",
     }
 
@@ -676,10 +686,17 @@ async def application_callback(
     )
 
     try:
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=message_map[action],
-        )
+        if action == "reject":
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=rich_setting("reject_text"),
+                parse_mode="HTML",
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=message_map[action],
+            )
     except Exception:
         logger.exception("사용자 처리 알림 전송 실패")
 
