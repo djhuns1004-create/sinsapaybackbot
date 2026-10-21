@@ -65,6 +65,7 @@ DEFAULT_SETTINGS = {
     "guide_backup__html": "",
     "button_text": "🏛 신사 페이백 신청 🏛",
     "button_text__html": "",
+    "button_icon_id": "",
     "photo_prompt": "📑 제휴사 충전내역을 첨부해주세요.",
     "photo_prompt__html": "",
     "account_prompt": (
@@ -220,41 +221,82 @@ def is_custom_emoji_entity(entity) -> bool:
 
 
 def message_to_html(message) -> str:
+    """Preserve Telegram formatting, including quotes and premium emoji.
+
+    Entity offsets use UTF-16 code units; overlapping nested entities are
+    rendered by opening/closing tags at boundaries in a deterministic order.
+    """
     text = message.text or ""
-    entities = [
-        entity
-        for entity in (message.entities or [])
-        if is_custom_emoji_entity(entity)
-        and entity.custom_emoji_id
-    ]
-
-    if not entities:
-        return html.escape(text)
-
-    entities.sort(key=lambda entity: entity.offset)
-    output = []
-    cursor = 0
-
-    for entity in entities:
-        start = utf16_to_python_index(text, entity.offset)
-        end = utf16_to_python_index(
-            text,
-            entity.offset + entity.length,
-        )
-
-        if start < cursor:
+    entities = message.entities or []
+    spans = []
+    tags = {
+        "bold": ("<b>", "</b>"),
+        "italic": ("<i>", "</i>"),
+        "underline": ("<u>", "</u>"),
+        "strikethrough": ("<s>", "</s>"),
+        "spoiler": ("<tg-spoiler>", "</tg-spoiler>"),
+        "code": ("<code>", "</code>"),
+        "pre": ("<pre>", "</pre>"),
+        "blockquote": ("<blockquote>", "</blockquote>"),
+        "expandable_blockquote": ("<blockquote expandable>", "</blockquote>"),
+    }
+    for ent in entities:
+        kind = str(getattr(ent.type, "value", ent.type)).lower()
+        start = utf16_to_python_index(text, ent.offset)
+        end = utf16_to_python_index(text, ent.offset + ent.length)
+        if start >= end:
             continue
-
-        output.append(html.escape(text[cursor:start]))
-        fallback = html.escape(text[start:end] or "✨")
-        output.append(
-            f'<tg-emoji emoji-id="{entity.custom_emoji_id}">'
-            f"{fallback}</tg-emoji>"
-        )
-        cursor = end
-
-    output.append(html.escape(text[cursor:]))
+        if is_custom_emoji_entity(ent) and ent.custom_emoji_id:
+            pair = (f'<tg-emoji emoji-id="{html.escape(str(ent.custom_emoji_id), quote=True)}">', "</tg-emoji>")
+        elif kind == "text_link" and ent.url and ent.url.startswith(("https://", "http://")):
+            pair = (f'<a href="{html.escape(ent.url, quote=True)}">', "</a>")
+        elif kind in tags:
+            pair = tags[kind]
+        else:
+            continue
+        spans.append((start, end, pair[0], pair[1]))
+    boundaries = sorted({0, len(text)} | {x for start,end,_,_ in spans for x in (start,end)})
+    output = []
+    active = []
+    for i, pos in enumerate(boundaries[:-1]):
+        nxt = boundaries[i + 1]
+        desired = sorted((sp for sp in spans if sp[0] <= pos and sp[1] >= nxt), key=lambda sp:(sp[0], -sp[1], sp[2]))
+        common = 0
+        while common < min(len(active), len(desired)) and active[common] == desired[common]:
+            common += 1
+        for sp in reversed(active[common:]):
+            output.append(sp[3])
+        for sp in desired[common:]:
+            output.append(sp[2])
+        output.append(html.escape(text[pos:nxt]))
+        active = desired
+    for sp in reversed(active):
+        output.append(sp[3])
     return "".join(output)
+
+
+def button_from_setting() -> InlineKeyboardButton:
+    label = get_setting("button_text")
+    emoji_id = get_setting("button_icon_id")
+    if emoji_id:
+        # Telegram Bot API supports a single custom icon before button text.
+        # The bot must meet Telegram's custom-emoji button eligibility rules.
+        return InlineKeyboardButton(label, callback_data="payback:start", api_kwargs={"icon_custom_emoji_id": emoji_id})
+    return InlineKeyboardButton(label, callback_data="payback:start")
+
+
+def button_emoji_from_message(message):
+    text = message.text or ""
+    entities = [e for e in (message.entities or []) if is_custom_emoji_entity(e) and e.custom_emoji_id]
+    if not entities:
+        return text, ""
+    first = entities[0]
+    start = utf16_to_python_index(text, first.offset)
+    end = utf16_to_python_index(text, first.offset + first.length)
+    # Only a leading premium emoji can be represented as a Telegram button icon.
+    if text[:start].strip():
+        return text, ""
+    return (text[:start] + text[end:]).strip() or "페이백 신청", str(first.custom_emoji_id)
 
 
 def rich_setting(key: str) -> str:
@@ -295,10 +337,7 @@ def status_label(status):
 def user_start_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [[
-            InlineKeyboardButton(
-                get_setting("button_text"),
-                callback_data="payback:start",
-            )
+            button_from_setting()
         ], [InlineKeyboardButton("📋 내 신청내역", callback_data="payback:mine")]]
     )
 
@@ -493,7 +532,12 @@ async def handle_text(
         return
     edit_key = context.user_data.get("admin_edit_key")
     if user_id == OWNER_ID and edit_key:
-        set_setting(edit_key, text)
+        if edit_key == "button_text":
+            label, icon_id = button_emoji_from_message(update.message)
+            set_setting("button_icon_id", icon_id)
+            set_setting(edit_key, label)
+        else:
+            set_setting(edit_key, text)
 
         if edit_key in RICH_KEYS:
             set_setting(
@@ -748,8 +792,8 @@ async def admin_callback(
         )
         if key == "button_text":
             premium_notice += (
-                "\n실제 버튼 안에서는 텔레그램 제한으로 "
-                "프리미엄 이모지가 일반 이모지 형태로 표시됩니다."
+                "\n문구 맨 앞에 프리미엄 이모지를 1개 넣으면 버튼 아이콘으로 저장됩니다."
+                "\n텔레그램의 봇 자격 조건에 따라 아이콘 표시가 제한될 수 있습니다."
             )
 
         await query.message.reply_text(
